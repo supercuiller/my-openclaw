@@ -135,6 +135,10 @@ import { describeUnknownError, mapThinkingLevel } from "../utils.js";
 import { flushPendingToolResultsAfterIdle } from "../wait-for-idle-before-flush.js";
 import { waitForCompactionRetryWithAggregateTimeout } from "./compaction-retry-aggregate-timeout.js";
 import {
+  resolveProviderRateLimiter,
+  type ProviderRateLimiter,
+} from "../../../infra/provider-rate-limit.js";
+import {
   resolveRunTimeoutDuringCompaction,
   resolveRunTimeoutWithCompactionGraceMs,
   selectCompactionTimeoutSnapshot,
@@ -1062,6 +1066,42 @@ export function wrapStreamFnRepairMalformedToolCallArguments(baseFn: StreamFn): 
       );
     }
     return wrapStreamRepairMalformedToolCallArguments(maybeStream);
+  };
+}
+
+function wrapStreamWithRateLimit(
+  stream: ReturnType<typeof streamSimple>,
+  limiter: ProviderRateLimiter,
+): ReturnType<typeof streamSimple> {
+  const originalResult = stream.result.bind(stream);
+  stream.result = async () => {
+    const message = await originalResult();
+    limiter.recordUsage(
+      (message as { usage?: { input?: number } }).usage?.input ?? 0,
+      (message as { usage?: { output?: number } }).usage?.output ?? 0,
+    );
+    return message;
+  };
+  return stream;
+}
+
+export function wrapStreamFnWithRateLimit(
+  baseFn: StreamFn,
+  limiter: ProviderRateLimiter,
+  signal?: AbortSignal,
+): StreamFn {
+  return (model, context, options) => {
+    // Wait for the rate-limit slot BEFORE invoking baseFn so the upstream
+    // provider call is truly deferred until the window allows it.
+    return limiter.acquireSlot(signal).then(() => {
+      const maybeStream = baseFn(model, context, options);
+      if (maybeStream && typeof maybeStream === "object" && "then" in maybeStream) {
+        return Promise.resolve(maybeStream).then((stream) =>
+          wrapStreamWithRateLimit(stream, limiter),
+        );
+      }
+      return wrapStreamWithRateLimit(maybeStream, limiter);
+    });
   };
 }
 
@@ -2095,6 +2135,18 @@ export async function runEmbeddedAttempt(
       if (anthropicPayloadLogger) {
         activeSession.agent.streamFn = anthropicPayloadLogger.wrapStreamFn(
           activeSession.agent.streamFn,
+        );
+      }
+
+      // Rate limiting: apply as the outermost wrapper so every LLM call
+      // (including mid-session tool-call cycles) goes through the per-provider
+      // FIFO queue. Slot is acquired before each call; usage is recorded after.
+      const rateLimiter = resolveProviderRateLimiter(params.provider, params.config);
+      if (rateLimiter) {
+        activeSession.agent.streamFn = wrapStreamFnWithRateLimit(
+          activeSession.agent.streamFn,
+          rateLimiter,
+          runAbortController.signal as AbortSignal,
         );
       }
 

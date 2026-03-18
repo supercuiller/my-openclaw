@@ -224,6 +224,15 @@ export const ModelDefinitionSchema = z
   })
   .strict();
 
+export const ModelRateLimitSchema = z
+  .object({
+    requestsPerMinute: z.number().int().positive().optional(),
+    inputTokensPerMinute: z.number().int().positive().optional(),
+    outputTokensPerMinute: z.number().int().positive().optional(),
+  })
+  .strict()
+  .optional();
+
 export const ModelProviderSchema = z
   .object({
     baseUrl: z.string().min(1),
@@ -236,6 +245,7 @@ export const ModelProviderSchema = z
     headers: z.record(z.string(), SecretInputSchema.register(sensitive)).optional(),
     authHeader: z.boolean().optional(),
     models: z.array(ModelDefinitionSchema),
+    rateLimits: ModelRateLimitSchema,
   })
   .strict();
 
