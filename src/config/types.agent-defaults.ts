@@ -14,6 +14,8 @@ export type AgentModelEntryConfig = {
   params?: Record<string, unknown>;
   /** Enable streaming for this model (default: true, false for Ollama to avoid SDK issue #1205). */
   streaming?: boolean;
+  /** Per-model rate limits (RPM + input/output TPM). */
+  rateLimits?: import("./types.models.js").ModelRateLimitConfig;
 };
 
 export type AgentModelListConfig = {

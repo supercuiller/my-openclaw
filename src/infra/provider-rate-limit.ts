@@ -213,51 +213,81 @@ function getRegistry(): Map<string, LimiterEntry> {
   return resolveGlobalSingleton(REGISTRY_KEY, () => new Map<string, LimiterEntry>());
 }
 
-/**
- * Resolve or create a `ProviderRateLimiter` for the given provider from the
- * current config.
- *
- * Returns `null` when no `rateLimits` are configured for this provider.
- *
- * The limiter instance is cached globally by normalized provider ID. If the
- * config changes (detected by `JSON.stringify` comparison), a new limiter is
- * created (discarding the previous window state and queue).
- */
-export function resolveProviderRateLimiter(
-  provider: string,
-  config?: OpenClawConfig,
-): ProviderRateLimiter | null {
-  const providers = config?.models?.providers;
-  const rateLimits =
-    providers?.[provider]?.rateLimits ??
-    findNormalizedProviderValue(providers, provider)?.rateLimits;
-
-  if (!rateLimits) {
-    return null;
-  }
-
-  const normalizedId = normalizeProviderId(provider);
+function resolveCachedLimiter(
+  cacheKey: string,
+  rateLimits: ModelRateLimitConfig,
+): ProviderRateLimiter {
   const configKey = JSON.stringify(rateLimits);
   const registry = getRegistry();
-  const existing = registry.get(normalizedId);
-
+  const existing = registry.get(cacheKey);
   if (existing && existing.configKey === configKey) {
     return existing.limiter;
   }
-
   const limiter = createProviderRateLimiterInstance(rateLimits);
-  registry.set(normalizedId, { limiter, configKey });
+  registry.set(cacheKey, { limiter, configKey });
   return limiter;
 }
 
 /**
- * Remove the cached limiter for a provider.
+ * Resolve or create a `ProviderRateLimiter` for the given provider (and
+ * optionally a specific model) from the current config.
+ *
+ * Lookup priority:
+ *   1. `config.agents.defaults.models["provider/modelId"].rateLimits` (when
+ *      `modelId` is supplied)
+ *   2. `config.models.providers[provider].rateLimits`
+ *
+ * Returns `null` when no `rateLimits` are configured at either level.
+ *
+ * Limiter instances are cached globally: model-level entries use
+ * `"normalizedProvider/modelId"` as the key; provider-level entries use the
+ * normalized provider ID. A config change (detected by `JSON.stringify`
+ * comparison) invalidates the cache and creates a fresh limiter.
+ */
+export function resolveProviderRateLimiter(
+  provider: string,
+  config?: OpenClawConfig,
+  modelId?: string,
+): ProviderRateLimiter | null {
+  const normalizedProvider = normalizeProviderId(provider);
+
+  // 1. Model-level rate limits take precedence.
+  if (modelId) {
+    const models = config?.agents?.defaults?.models;
+    const normalizedRef = `${normalizedProvider}/${modelId}`;
+    const modelRateLimits =
+      models?.[`${provider}/${modelId}`]?.rateLimits ??
+      models?.[normalizedRef]?.rateLimits;
+    if (modelRateLimits) {
+      return resolveCachedLimiter(normalizedRef, modelRateLimits);
+    }
+  }
+
+  // 2. Fall back to provider-level rate limits.
+  const providers = config?.models?.providers;
+  const providerRateLimits =
+    providers?.[provider]?.rateLimits ??
+    findNormalizedProviderValue(providers, provider)?.rateLimits;
+
+  if (!providerRateLimits) {
+    return null;
+  }
+
+  return resolveCachedLimiter(normalizedProvider, providerRateLimits);
+}
+
+/**
+ * Remove the cached limiter for a provider (or a specific model).
  * Primarily used in tests to reset state between runs.
  */
-export function resetProviderRateLimiterForTest(provider: string): void {
-  const normalizedId = normalizeProviderId(provider);
+export function resetProviderRateLimiterForTest(provider: string, modelId?: string): void {
+  const normalizedProvider = normalizeProviderId(provider);
   const registry = getRegistry();
-  registry.delete(normalizedId);
+  if (modelId) {
+    registry.delete(`${normalizedProvider}/${modelId}`);
+  } else {
+    registry.delete(normalizedProvider);
+  }
 }
 
 // Export for testing.

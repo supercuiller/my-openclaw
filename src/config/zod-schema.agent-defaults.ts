@@ -12,6 +12,7 @@ import {
   CliBackendSchema,
   HumanDelaySchema,
   TypingModeSchema,
+  ModelRateLimitSchema,
 } from "./zod-schema.core.js";
 
 export const AgentDefaultsSchema = z
@@ -32,6 +33,8 @@ export const AgentDefaultsSchema = z
             params: z.record(z.string(), z.unknown()).optional(),
             /** Enable streaming for this model (default: true, false for Ollama to avoid SDK issue #1205). */
             streaming: z.boolean().optional(),
+            /** Per-model rate limits (RPM + input/output TPM). */
+            rateLimits: ModelRateLimitSchema,
           })
           .strict(),
       )

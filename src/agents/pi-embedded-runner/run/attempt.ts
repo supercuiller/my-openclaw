@@ -2141,7 +2141,7 @@ export async function runEmbeddedAttempt(
       // Rate limiting: apply as the outermost wrapper so every LLM call
       // (including mid-session tool-call cycles) goes through the per-provider
       // FIFO queue. Slot is acquired before each call; usage is recorded after.
-      const rateLimiter = resolveProviderRateLimiter(params.provider, params.config);
+      const rateLimiter = resolveProviderRateLimiter(params.provider, params.config, params.modelId);
       if (rateLimiter) {
         activeSession.agent.streamFn = wrapStreamFnWithRateLimit(
           activeSession.agent.streamFn,
