@@ -69,9 +69,13 @@ describe("createProviderRateLimiterInstance", () => {
 
     it("processes multiple queued requests after window rolls", async () => {
       const clock = makeNow(1000);
-      const limiter = createProviderRateLimiterInstance({ requestsPerMinute: 1 }, clock.now);
+      // Use RPM=3 and fill the current window first so all three queued items
+      // can drain together when the single window rolls over.
+      const limiter = createProviderRateLimiterInstance({ requestsPerMinute: 3 }, clock.now);
 
       await limiter.acquireSlot();
+      await limiter.acquireSlot();
+      await limiter.acquireSlot(); // window is now full
 
       const results: number[] = [];
       const p1 = limiter.acquireSlot().then(() => results.push(1));
