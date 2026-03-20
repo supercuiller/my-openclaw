@@ -47,8 +47,27 @@ openclaw config set browser.noSandbox true
 
 ## 7. Set rate limits (Gemini Flash example)
 
+Gemini Flash free tier limits: 1K RPM, 2M TPM (combined input+output), 10K RPD.
+Applying 20% margin:
+
 ```bash
 openclaw config set "agents.defaults.models.google/gemini-flash-latest.rateLimits.requestsPerMinute" 800
-openclaw config set "agents.defaults.models.google/gemini-flash-latest.rateLimits.inputTokensPerMinute" 1600000
-openclaw config set "agents.defaults.models.google/gemini-flash-latest.rateLimits.outputTokensPerMinute" 1600000
+openclaw config set "agents.defaults.models.google/gemini-flash-latest.rateLimits.totalTokensPerMinute" 1600000
 ```
+
+> Use `totalTokensPerMinute` (not separate input/output limits) — Gemini's 2M TPM cap is combined.
+
+## 8. Update from git
+
+After pulling new commits, rebuild and reinstall the gateway service:
+
+```bash
+cd /path/to/your/openclaw-repo
+git pull --rebase
+pnpm install
+pnpm build
+pnpm openclaw gateway install
+pnpm openclaw gateway start
+```
+
+> `pnpm openclaw gateway install` updates the systemd unit to point at the new `dist/index.js`.

@@ -229,6 +229,7 @@ export const ModelRateLimitSchema = z
     requestsPerMinute: z.number().int().positive().optional(),
     inputTokensPerMinute: z.number().int().positive().optional(),
     outputTokensPerMinute: z.number().int().positive().optional(),
+    totalTokensPerMinute: z.number().int().positive().optional(),
   })
   .strict()
   .optional();
