@@ -94,6 +94,12 @@ function isUnderLimits(state: WindowState, config: ModelRateLimitConfig): boolea
   ) {
     return false;
   }
+  if (
+    config.totalTokensPerMinute !== undefined &&
+    state.inputTokenCount + state.outputTokenCount >= config.totalTokensPerMinute
+  ) {
+    return false;
+  }
   return true;
 }
 

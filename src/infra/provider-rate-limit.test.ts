@@ -169,6 +169,44 @@ describe("createProviderRateLimiterInstance", () => {
     });
   });
 
+  describe("TPM limits — total tokens (combined input+output)", () => {
+    it("queues next request when combined tokens exceed totalTokensPerMinute", async () => {
+      const clock = makeNow(1000);
+      const limiter = createProviderRateLimiterInstance(
+        { totalTokensPerMinute: 100 },
+        clock.now,
+      );
+
+      await limiter.acquireSlot();
+      limiter.recordUsage(60, 50); // combined = 110, over the 100 limit
+
+      let queued = false;
+      const p = limiter.acquireSlot().then(() => {
+        queued = true;
+      });
+
+      await Promise.resolve();
+      expect(queued).toBe(false);
+
+      clock.advance(60_001);
+      await flushTimers();
+      await p;
+      expect(queued).toBe(true);
+    });
+
+    it("allows request when combined tokens are below totalTokensPerMinute", async () => {
+      const clock = makeNow(1000);
+      const limiter = createProviderRateLimiterInstance(
+        { totalTokensPerMinute: 200 },
+        clock.now,
+      );
+
+      await limiter.acquireSlot();
+      limiter.recordUsage(60, 50); // combined = 110, under 200
+      await expect(limiter.acquireSlot()).resolves.toBeUndefined();
+    });
+  });
+
   describe("AbortSignal", () => {
     it("rejects queued entry when signal is aborted", async () => {
       const clock = makeNow(1000);
