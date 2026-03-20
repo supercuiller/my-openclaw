@@ -1072,14 +1072,20 @@ export function wrapStreamFnRepairMalformedToolCallArguments(baseFn: StreamFn): 
 function wrapStreamWithRateLimit(
   stream: ReturnType<typeof streamSimple>,
   limiter: ProviderRateLimiter,
+  model?: string,
 ): ReturnType<typeof streamSimple> {
   const originalResult = stream.result.bind(stream);
   stream.result = async () => {
     const message = await originalResult();
-    limiter.recordUsage(
-      (message as { usage?: { input?: number } }).usage?.input ?? 0,
-      (message as { usage?: { output?: number } }).usage?.output ?? 0,
-    );
+    const inputTokens = (message as { usage?: { input?: number } }).usage?.input ?? 0;
+    const outputTokens = (message as { usage?: { output?: number } }).usage?.output ?? 0;
+    limiter.recordUsage(inputTokens, outputTokens);
+    log.info("llm token usage", {
+      model,
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+    });
     return message;
   };
   return stream;
@@ -1097,10 +1103,10 @@ export function wrapStreamFnWithRateLimit(
       const maybeStream = baseFn(model, context, options);
       if (maybeStream && typeof maybeStream === "object" && "then" in maybeStream) {
         return Promise.resolve(maybeStream).then((stream) =>
-          wrapStreamWithRateLimit(stream, limiter),
+          wrapStreamWithRateLimit(stream, limiter, model),
         );
       }
-      return wrapStreamWithRateLimit(maybeStream, limiter);
+      return wrapStreamWithRateLimit(maybeStream, limiter, model);
     });
   };
 }
