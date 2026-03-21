@@ -1072,8 +1072,9 @@ export function wrapStreamFnRepairMalformedToolCallArguments(baseFn: StreamFn): 
 function wrapStreamWithRateLimit(
   stream: ReturnType<typeof streamSimple>,
   limiter: ProviderRateLimiter,
-  model?: string,
+  model?: { id?: string } | string,
 ): ReturnType<typeof streamSimple> {
+  const modelId = typeof model === "string" ? model : model?.id;
   const originalResult = stream.result.bind(stream);
   stream.result = async () => {
     const message = await originalResult();
@@ -1082,7 +1083,7 @@ function wrapStreamWithRateLimit(
     limiter.recordUsage(inputTokens, outputTokens);
     if (inputTokens > 0 || outputTokens > 0) {
       log.info("llm token usage", {
-        model: typeof model === "object" && model !== null && "id" in model ? (model as { id: string }).id : model,
+        model: modelId,
         inputTokens,
         outputTokens,
         totalTokens: inputTokens + outputTokens,
