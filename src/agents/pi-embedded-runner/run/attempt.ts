@@ -1080,12 +1080,14 @@ function wrapStreamWithRateLimit(
     const inputTokens = (message as { usage?: { input?: number } }).usage?.input ?? 0;
     const outputTokens = (message as { usage?: { output?: number } }).usage?.output ?? 0;
     limiter.recordUsage(inputTokens, outputTokens);
-    log.info("llm token usage", {
-      model,
-      inputTokens,
-      outputTokens,
-      totalTokens: inputTokens + outputTokens,
-    });
+    if (inputTokens > 0 || outputTokens > 0) {
+      log.info("llm token usage", {
+        model: typeof model === "object" && model !== null && "id" in model ? (model as { id: string }).id : model,
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+      });
+    }
     return message;
   };
   return stream;
